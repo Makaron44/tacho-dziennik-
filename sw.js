@@ -41,3 +41,7 @@ self.addEventListener("fetch", (event) => {
     }
   })());
 });
+// pozwól aplikacji wymusić aktywację nowego SW
+self.addEventListener('message', (e) => {
+  if (e.data === 'SKIP_WAITING') self.skipWaiting();
+});
