@@ -1,0 +1,185 @@
+:root{ --bg:#111318; --card:#161922; --ink:#e9eef6; --muted:#9aa4b2; --accent:#4ee3b5; }
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; background:var(--bg); color:var(--ink); font-family: system-ui, Segoe UI, Roboto, Arial, sans-serif; }
+.top{ position:sticky; top:0; z-index:10; display:flex; justify-content:space-between; align-items:center; padding:12px 14px; background:rgba(0,0,0,.55); backdrop-filter:saturate(1.2) blur(8px); border-bottom:1px solid rgba(255,255,255,.06); }
+.brand{ font-weight:900; letter-spacing:.3px; }
+.tabs button{ margin-left:8px; background:transparent; color:var(--ink); border:1px solid rgba(255,255,255,.15); padding:6px 10px; border-radius:10px; }
+.tabs button.active{ background:var(--accent); color:#000; border-color:transparent; font-weight:800; }
+main{ padding:14px; }
+h1{ font-size:20px; margin:14px 2px; }
+.muted{ color:var(--muted); }
+.card{ background:var(--card); border:1px solid rgba(255,255,255,.06); border-radius:14px; padding:12px; margin:12px 2px; }
+.row{ display:flex; gap:10px; margin:6px 2px; }
+button{ background:#2b3040; color:var(--ink); border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:8px 12px; }
+button.danger{ background:#ff6b6b; color:#000; border:0; }
+input[type="text"]{ width:100%; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.12); background:#0f1217; color:var(--ink); margin:0 0 8px; }
+.mono{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space:pre-wrap; }
+.view{ display:none; } .view.show{ display:block; }
+
+/* Upewnij się, że pasek DUO nie przykrywa UI u dołu */
+body{ padding-bottom:110px; }
+/* === iPhone pack (safe-area / ergonomia / gęstość) === */
+:root{
+  --safe-t: env(safe-area-inset-top);
+  --safe-b: env(safe-area-inset-bottom);
+  --safe-l: env(safe-area-inset-left);
+  --safe-r: env(safe-area-inset-right);
+}
+
+/* 1) Top bar z uwzględnieniem notcha */
+.top{
+  padding-top: max(10px, var(--safe-t));
+}
+
+/* 2) Typografia skaluje się do szerokości */
+html{ font-size: clamp(15px, 2.6vw, 17px); }
+h1{ font-size: clamp(18px, 4.6vw, 22px); }
+
+/* 3) Trafianie palcem: min. 44px */
+button, .tabs button{
+  min-height: 44px;
+  padding: 10px 12px;
+  -webkit-tap-highlight-color: transparent;
+}
+input, select, textarea{ font-size: 16px; } /* brak auto-zoomu na iOS */
+
+/* 4) Karty/odstępy ciaśniej na wąskim ekranie */
+@media (max-width: 430px){
+  main{ padding: 10px; }
+  .card{ margin: 10px 2px; padding: 10px; border-radius: 12px; }
+  .row{ gap: 8px; }
+}
+
+/* 5) Tacho bar – bezpieczny dystans od „home” i krawędzi */
+#tachoBar.duo.v4{
+  left: calc(12px + var(--safe-l)) !important;
+  right: calc(12px + var(--safe-r)) !important;
+  bottom: calc(16px + var(--safe-b)) !important;
+}
+#tachoFab{
+  right: calc(12px + var(--safe-r)) !important;
+  bottom: calc(16px + var(--safe-b)) !important;
+}
+
+/* 6) Zapas miejsca pod paskiem (by nic nie było zakryte) */
+body{ padding-bottom: calc(120px + var(--safe-b)) !important; }
+
+/* 7) Układ statystyk A/B – jedna kolumna na wąsko */
+@media (max-width: 430px){
+  #tachoBar.duo.v4 .stats{ grid-template-columns: 1fr; }
+}
+
+/* 8) „Oddychający” log – wysokość i momentum scroll */
+#tachoBar.duo.v4 .tlog{ max-height: 38vh; -webkit-overflow-scrolling: touch; }
+
+/* 9) Mniejsze marginesy w górnym pasku przycisków paska */
+#tachoBar.duo.v4 .tduo-inner{ gap: 6px; }
+#tachoBar.duo.v4 .trow{ gap: 6px; flex-wrap: wrap; }
+#tachoBar.duo.v4 .trow.top button{ padding: 8px 10px; }
+
+/* 10) Subtelny cień pigułek/przycisków dla czytelności na OLED */
+#tachoBar.duo.v4, #tachoFab{ box-shadow: 0 12px 28px rgba(0,0,0,.35); }
+/* ========== Neo-glass UI dla Tacho DUO ========== */
+:root{
+  --card:#161a22;
+  --ink:#e9eef6;
+  --muted:#9aa4b2;
+  --ok:#4ee3b5;
+  --warn:#ffd65c;
+  --bad:#ff6b6b;
+  --surf: rgba(255,255,255,.06);
+  --surf-2: rgba(255,255,255,.10);
+}
+
+/* Przyciski – gładkie, responsywne, ładny „press” */
+#tachoBar.duo.v4 button{
+  background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.06));
+  color: var(--ink);
+  border: 1px solid var(--surf);
+  border-radius: 14px;
+  padding: 10px 12px;
+  backdrop-filter: saturate(1.1) blur(6px);
+  box-shadow: 0 6px 18px rgba(0,0,0,.25);
+  transition: transform .07s ease, box-shadow .18s ease, background .2s ease, border-color .2s ease;
+}
+#tachoBar.duo.v4 button:hover{ background: rgba(255,255,255,.14); }
+#tachoBar.duo.v4 button:active{ transform: translateY(1px) scale(.98); }
+#tachoBar.duo.v4 .aswitch{ background: var(--ok); color:#000; border-color: transparent; font-weight:900; }
+#tachoBar.duo.v4 .parking9{ background:#6cc8ff; color:#000; border-color: transparent; font-weight:900; }
+#tachoBar.duo.v4 .dreset{ background: var(--bad); color:#000; border:0; font-weight:900; }
+#tachoBar.duo.v4 .restReset{ background: var(--warn); color:#000; border:0; font-weight:900; }
+#tachoBar.duo.v4 .vplay.on{ background: var(--ok); color:#000; border-color: transparent; font-weight:900; }
+
+/* Tryby – aktywny kolor + „uniesienie” (już masz klasę .active) */
+#tachoBar.duo.v4 .modes .chips button{ min-width: 92px; }
+#tachoBar.duo.v4 .modes .chips button.active{
+  transform: translateY(-1px);
+  box-shadow: 0 8px 22px rgba(0,0,0,.28), 0 0 0 2px rgba(255,255,255,.16) inset;
+  font-weight:900;
+}
+#tachoBar.duo.v4 .modes .chips button[data-m="drive"].active{ background: var(--ok);   color:#000; }
+#tachoBar.duo.v4 .modes .chips button[data-m="pause"].active{ background: var(--warn); color:#000; }
+#tachoBar.duo.v4 .modes .chips button[data-m="work"].active { background:#a7a6ff; color:#000; }
+#tachoBar.duo.v4 .modes .chips button[data-m="rest"].active { background:#6cc8ff; color:#000; }
+
+/* Karty A/B – nowoczesne „glass cards” */
+#tachoBar.duo.v4 .stats{
+  width:100%;
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:12px;
+}
+@media (max-width:430px){
+  #tachoBar.duo.v4 .stats{ grid-template-columns: 1fr; }
+}
+#tachoBar.duo.v4 .col{
+  position: relative;
+  background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.04));
+  border: 1px solid var(--surf);
+  border-radius: 16px;
+  padding: 12px;
+  box-shadow: 0 10px 26px rgba(0,0,0,.30);
+}
+#tachoBar.duo.v4 .col.active{ outline: 2px solid var(--ok); }
+#tachoBar.duo.v4 .col.prewarn{ box-shadow: 0 0 0 2px rgba(255,214,92,.35) inset; }
+#tachoBar.duo.v4 .col.warn-stint{ box-shadow: 0 0 0 2px rgba(255,107,107,.35) inset; }
+#tachoBar.duo.v4 .col .hdr{
+  display:inline-flex; align-items:center; gap:8px;
+  font-weight:900; letter-spacing:.4px; margin-bottom:8px;
+}
+#tachoBar.duo.v4 .col .hdr::after{
+  content: attr(data-mode);
+  text-transform: uppercase;
+  font-size: 11px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.12);
+  color: var(--muted);
+}
+/* header chip koloru wg trybu */
+#tachoBar.duo.v4 .col[data-mode="drive"] .hdr::after{ background: var(--ok); color:#000; }
+#tachoBar.duo.v4 .col[data-mode="pause"] .hdr::after{ background: var(--warn); color:#000; }
+#tachoBar.duo.v4 .col[data-mode="rest"]  .hdr::after{ background: #6cc8ff; color:#000; }
+
+/* Linie z etykietą+wartością + cienkie metry postępu */
+#tachoBar.duo.v4 .line{ position: relative; display:flex; justify-content:space-between; gap:10px; padding:6px 2px 10px; }
+#tachoBar.duo.v4 .line .lbl{ color: var(--muted); font-weight:700; letter-spacing:.3px; }
+#tachoBar.duo.v4 .line .val{ font-weight:900; }
+#tachoBar.duo.v4 .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+/* wspólne tło paska */
+#tachoBar.duo.v4 .line::after{
+  content:""; position:absolute; left:0; bottom:2px; height:6px;
+  width: 0; border-radius: 999px; background: linear-gradient(90deg, rgba(255,255,255,.18), rgba(255,255,255,.04));
+}
+/* konkretne metry – sterowane zmiennymi z JS */
+#tachoBar.duo.v4 .stint::after{ width: var(--p-stint); background: linear-gradient(90deg, var(--ok), rgba(78,227,181,.2)); }
+#tachoBar.duo.v4 .brk::after  { width: var(--p-break); background: linear-gradient(90deg, var(--warn), rgba(255,214,92,.2)); }
+#tachoBar.duo.v4 .day::after  { width: var(--p-day);   background: linear-gradient(90deg, #8ac5ff, rgba(138,197,255,.2)); }
+#tachoBar.duo.v4 .w30::after  { width: var(--p-30h);   background: linear-gradient(90deg, #b79cff, rgba(183,156,255,.2)); }
+
+/* Sekcja „Przerwa aktywnego” – ciasny rządek pigułek */
+#tachoBar.duo.v4 .presets .chips button{ min-width:58px; font-weight:800; }
+#tachoBar.duo.v4 .trow.top, #tachoBar.duo.v4 .trow{ gap: 8px; flex-wrap: wrap; }
+#tachoBar.gps-on   .gpsToggle{ background:#4ee3b5; color:#000; border-color:transparent; font-weight:900; }
+#tachoBar.gps-pending .gpsToggle{ background:#ffd65c; color:#000; border-color:transparent; font-weight:900; }

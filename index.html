@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Tacho-Dziennik Kierowcy</title>
+  <meta name="theme-color" content="#111318" />
+  <link rel="stylesheet" href="./app.css?v=1" />
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icon-192.png">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">Tacho-Dziennik</div>
+    <nav class="tabs">
+      <button data-view="dash" class="active">Panel</button>
+      <button data-view="log">Log</button>
+      <button data-view="ust">Ustawienia</button>
+    </nav>
+  </header>
+
+  <main id="views">
+    <section id="view-dash" class="view show">
+      <h1>Panel dzienny</h1>
+      <p class="muted">Steruj paskiem DUO poniżej. Tu możesz też dodać szybkie notatki dyspozycji itp.</p>
+      <div id="quick" class="card">
+        <input id="note" type="text" placeholder="Notatka (załadunek, rozładunek, dyspozycja…)" />
+        <button id="saveNote">Zapisz</button>
+        <div id="notes"></div>
+      </div>
+    </section>
+
+    <section id="view-log" class="view">
+      <h1>Log zdarzeń</h1>
+      <div id="externalLog" class="card mono">Ładowanie…</div>
+      <div class="row">
+        <button id="expLog">Eksport</button>
+        <button id="clrLog" class="danger">Wyczyść</button>
+      </div>
+    </section>
+
+    <section id="view-ust" class="view">
+      <h1>Ustawienia</h1>
+      <div class="card">
+        <label><input type="checkbox" id="prewarn15" checked> Alert 15 min przed końcem 4:30</label>
+        <label><input type="checkbox" id="autoProtect" checked> Auto-ochrona współkierowcy (ustaw Przerwę)</label>
+      </div>
+      <p class="muted">Uwaga: konfiguracja dotyczy działania paska DUO.</p>
+    </section>
+  </main>
+
+  <!-- Twój pasek tacho DUO (v4+) -->
+  <script defer src="./addon-tacho-bar.duo.v4.js?v=9"></script>
+  <!-- Mały skrypt tej apki -->
+  <script defer src="./app.js?v=1"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js');
+    });
+  }
+</script>
+</body>
+</html>
