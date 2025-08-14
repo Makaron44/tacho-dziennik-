@@ -86,65 +86,47 @@
   const cap = d => d.extend ? MS(10*60) : MS(9*60);
 
   // ── GPS (foreground) ─────────────────────────────────────────────────────
-  // ── GPS (foreground) ─────────────────────────────────────────────────────
-const GPS_FILTER = {
-  MIN_SPEED_KMH: 3,     // poniżej: ignorujemy (postoje, manewry na parkingu)
-  MAX_SPEED_KMH: 120,   // powyżej: ignorujemy (błędny odczyt)
-  MIN_MOVE_M: 15,       // ignoruj punkty jeśli przesunięcie < 15 m
-  MAX_JUMP_KM: 1.0,     // odrzuć „teleporty” > 1 km pomiędzy fixami
-  MAX_ACCURACY_M: 50    // pomiń, jeśli accuracy > 50 m (za mało dokładny)
-};
-
-let G = load(GKEY, { on:false, day: ymd(), km: 0, last:null });
-let gpsWatchId = null;
-
-const hv = a => a*Math.PI/180;
-function distKm(lat1, lon1, lat2, lon2){
-  const R=6371, dLat=hv(lat2-lat1), dLon=hv(lon2-lon1);
-  const s1=Math.sin(dLat/2), s2=Math.sin(dLon/2);
-  const aa = s1*s1 + Math.cos(hv(lat1))*Math.cos(hv(lat2))*s2*s2;
-  return 2*R*Math.atan2(Math.sqrt(aa), Math.sqrt(1-aa));
-}
-
-function startGPS(){
-  if (!('geolocation' in navigator)) { alert('Brak GPS w przeglądarce.'); return; }
-  if (gpsWatchId!=null) return;
-  gpsWatchId = navigator.geolocation.watchPosition(pos=>{
-    if (document.visibilityState!=='visible') return;
-    if (!S.running || act().mode!=='drive') return;   // liczymy tylko w czasie „Jazda”
-
-    const {latitude:la, longitude:lo, speed, accuracy} = pos.coords;
-    if (accuracy && accuracy > GPS_FILTER.MAX_ACCURACY_M) return; // za słaby fix
-
-    resetGpsDayIfNeeded();
-    const t = Date.now();
-
-    if (G.last){
-      const dtH = (t - G.last.t)/3600000;                 // godziny
-      const dKM = distKm(G.last.la, G.last.lo, la, lo);   // kilometry
-      if (dKM*1000 < GPS_FILTER.MIN_MOVE_M) { G.last = {la,lo,t}; return; }
-
-      // prędkość: z GPS (jeśli jest) albo z dystansu/dt
-      const vGps = (speed!=null) ? (speed*3.6) : null;
-      const vEst = dKM / Math.max(dtH, 1e-6);             // km/h
-      const v = (vGps!=null) ? vGps : vEst;
-
-      // filtry prędkości i teleportów
-      if (v < GPS_FILTER.MIN_SPEED_KMH || v > GPS_FILTER.MAX_SPEED_KMH) { G.last = {la,lo,t}; return; }
-      if (dKM > GPS_FILTER.MAX_JUMP_KM) { G.last = {la,lo,t}; return; }
-
-      G.km += dKM;
-    }
-    G.last = { la, lo, t };
-    save(GKEY,G); updateKmUI();
-  }, err=>{
-    console.warn('GPS error', err);
-  }, {
-    enableHighAccuracy:true,
-    maximumAge: 5000,
-    timeout: 15000
-  });
-}
+  let G = load(GKEY, { on:false, day: ymd(), km: 0, last:null });
+  let gpsWatchId = null;
+  const hv = a=>a*Math.PI/180;
+  function distKm(lat1, lon1, lat2, lon2){
+    const R=6371, dLat=hv(lat2-lat1), dLon=hv(lon2-lon1);
+    const s1=Math.sin(dLat/2), s2=Math.sin(dLon/2);
+    const aa = s1*s1 + Math.cos(hv(lat1))*Math.cos(hv(lat2))*s2*s2;
+    return 2*R*Math.atan2(Math.sqrt(aa), Math.sqrt(1-aa));
+  }
+  function resetGpsDayIfNeeded(){
+    const d = ymd(new Date());
+    if (G.day!==d){ G.day=d; G.km=0; G.last=null; save(GKEY,G); }
+  }
+  function updateKmUI(){
+    const el = document.querySelector('#tachoBar .kmToday');
+    if (el) el.textContent = `km dziś: ${G.km.toFixed(1)}`;
+    const btn = document.querySelector('#tachoBar .gpsToggle');
+    if (btn) btn.textContent = `GPS: ${G.on?'on':'off'}`;
+  }
+  function startGPS(){
+    if (!('geolocation' in navigator)) { alert('Brak GPS w przeglądarce.'); return; }
+    if (gpsWatchId!=null) return;
+    gpsWatchId = navigator.geolocation.watchPosition(pos=>{
+      if (document.visibilityState!=='visible') return;
+      if (!S.running || act().mode!=='drive') return;
+      const {latitude:la, longitude:lo, speed} = pos.coords;
+      if (speed!=null){
+        const kmh = speed*3.6;
+        if (kmh>160 || kmh<1) return; // filtr skrajnych/zerowych
+      }
+      resetGpsDayIfNeeded();
+      if (G.last){
+        const d = distKm(G.last.la, G.last.lo, la, lo);
+        if (d>0 && d<2) G.km += d; // odrzuć „teleporty”
+      }
+      G.last = { la, lo, t: Date.now() };
+      save(GKEY,G); updateKmUI();
+    }, err=>{ console.warn('GPS error', err); },{
+      enableHighAccuracy:true, maximumAge: 10000, timeout: 15000
+    });
+  }
   function stopGPS(){
     if (gpsWatchId!=null){ navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId=null; }
   }

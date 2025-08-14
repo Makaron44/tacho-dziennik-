@@ -183,12 +183,3 @@ body{ padding-bottom: calc(120px + var(--safe-b)) !important; }
 #tachoBar.duo.v4 .trow.top, #tachoBar.duo.v4 .trow{ gap: 8px; flex-wrap: wrap; }
 #tachoBar.gps-on   .gpsToggle{ background:#4ee3b5; color:#000; border-color:transparent; font-weight:900; }
 #tachoBar.gps-pending .gpsToggle{ background:#ffd65c; color:#000; border-color:transparent; font-weight:900; }
-.update-bar{
-  position:fixed; left:12px; right:12px; bottom:18px;
-  background:#111; color:#fff; border:1px solid rgba(255,255,255,.12);
-  border-radius:12px; padding:10px; display:flex; gap:10px; align-items:center;
-  box-shadow:0 12px 28px rgba(0,0,0,.35); z-index:9999;
-}
-.update-bar .sp{ flex:1 }
-.update-bar button{ background:#4ee3b5; color:#000; border:0; border-radius:10px; padding:8px 12px; font-weight:800 }
-.update-bar .later{ background:#2b3040; color:#fff }

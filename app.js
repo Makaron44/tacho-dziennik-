@@ -57,28 +57,3 @@
   ap.addEventListener('change',  ()=>{ /* tu można w przyszłości sterować auto-ochroną */ });
 
 })();
-// Auto-update: sprawdzaj nową wersję i zaproponuj odświeżenie
-if ('serviceWorker' in navigator) {
-  // jeśli SW się przełączył -> odśwież stronę
-  navigator.serviceWorker.addEventListener('controllerchange', () => location.reload());
-
-  navigator.serviceWorker.ready.then((reg) => {
-    // co minutę sprawdź aktualizacje
-    setInterval(() => reg.update(), 60_000);
-
-    reg.addEventListener('updatefound', () => {
-      const nw = reg.installing;
-      if (!nw) return;
-      nw.addEventListener('statechange', () => {
-        // "installed" + mamy już kontrolera => jest nowa wersja
-        if (nw.state === 'installed' && navigator.serviceWorker.controller) {
-          // zapytaj użytkownika o odświeżenie
-          if (confirm('Nowa wersja dostępna. Odświeżyć teraz?')) {
-            // poproś waiting SW, by wskoczył od razu
-            if (reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
-          }
-        }
-      });
-    });
-  });
-}
