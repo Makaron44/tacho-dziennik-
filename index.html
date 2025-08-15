@@ -5,10 +5,156 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Tacho-Dziennik Kierowcy</title>
   <meta name="theme-color" content="#111318" />
-  <link rel="stylesheet" href="./app.css?v=2" />
+  <link rel="stylesheet" href="./app.css?v=5" />
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icon-192.png">
 </head>
+<!-- ===== FAB EKSPORTU 2.1 (kopiuj + overlay + potwierdzenia) ============ -->
+<style>
+  #expFab{
+    position:fixed; right:14px; bottom:14px; width:52px; height:52px; border-radius:26px;
+    background:#2bd5a7; color:#0b0e12; font-weight:700; display:flex; align-items:center; justify-content:center;
+    box-shadow:0 6px 24px rgba(0,0,0,.35); z-index:999999; user-select:none; cursor:pointer;
+  }
+  #expFab:active{ transform:scale(.97); }
+  #expOverlay{ position:fixed; inset:0; background:transparent; display:none; z-index:999995; }
+  #expMenu{
+    position:fixed; right:14px; bottom:74px; display:none;
+    background:#1b1f27; color:#e9edf3; border:1px solid rgba(255,255,255,.12); border-radius:12px; padding:8px;
+    box-shadow:0 12px 30px rgba(0,0,0,.45); z-index:1000000; min-width:230px;
+  }
+  #expMenu button{
+    display:block; width:100%; margin:4px 0; padding:10px 12px; text-align:left;
+    border-radius:10px; border:1px solid rgba(255,255,255,.14); background:transparent; color:inherit;
+  }
+  #expMenu button:active{ transform:scale(.98); }
+</style>
+
+<div id="expFab" title="Eksport notatek">⇩</div>
+<div id="expOverlay"></div>
+<div id="expMenu">
+  <button data-kind="csv">⤓ Eksport CSV (plik)</button>
+  <button data-kind="copy-csv">📋 Kopiuj CSV</button>
+  <button data-kind="json">⤓ Eksport JSON (plik)</button>
+  <button data-kind="copy-json">📋 Kopiuj JSON</button>
+</div>
+
+<script>
+(function(){
+  const CAND_KEYS=['tacho_notes_v1','notes'];
+  const p2=n=>String(n).padStart(2,'0');
+  const genId=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+
+  function readRaw(){
+    for(const k of CAND_KEYS){
+      try{ const raw=localStorage.getItem(k);
+        if(raw&&raw!=='[]'){ const a=JSON.parse(raw); if(Array.isArray(a)&&a.length) return a; }
+      }catch(_){}
+    }
+    return [];
+  }
+  function normalize(items){
+    const out=[];
+    for(const it of (items||[])){
+      if(it==null) continue;
+      if(typeof it==='string'){
+        const t=it.trim(); if(!t) continue;
+        out.push({id:genId(), txt:t, at:Date.now()});
+      } else if(typeof it==='object'){
+        let {id,txt,at}=it;
+        txt=String(txt??'').trim(); if(!txt) continue;
+        if(typeof at!=='number'||!isFinite(at)) at=Date.now();
+        if(!id) id=genId();
+        out.push({id,txt,at});
+      }
+    }
+    return out.sort((a,b)=>b.at-a.at);
+  }
+  function fmtPL(ts){ const d=new Date(ts); return `${p2(d.getDate())}.${p2(d.getMonth()+1)} ${p2(d.getHours())}:${p2(d.getMinutes())}`; }
+  function toCSV(rows, sep=';'){
+    return '\uFEFF' + rows.map(r => r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(sep)).join('\r\n');
+  }
+  async function tryDownload(name, content, mime){
+    try{ // 1) plik (blob)
+      const blob=new Blob([content],{type:mime});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download=name; a.target='_blank'; a.rel='noopener';
+      document.body.appendChild(a); a.click();
+      setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); },0);
+      return 'plik';
+    }catch(_){}
+    try{ // 2) karta
+      const dataUrl=`data:${mime};charset=utf-8,`+encodeURIComponent(content);
+      window.open(dataUrl,'_blank'); return 'karta';
+    }catch(_){}
+    return 'niepowodzenie';
+  }
+  async function copyText(txt){
+    // a) Clipboard API
+    try{ await navigator.clipboard.writeText(txt); return true; }catch(_){}
+    // b) execCommand fallback
+    try{
+      const ta=document.createElement('textarea');
+      ta.value=txt; ta.style.position='fixed'; ta.style.opacity='0'; ta.style.pointerEvents='none';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      const ok=document.execCommand('copy'); ta.remove(); if(ok) return true;
+    }catch(_){}
+    // c) karta do ręcznego skopiowania
+    try{ window.open('data:text/plain;charset=utf-8,'+encodeURIComponent(txt),'_blank'); }catch(_){}
+    return false;
+  }
+
+  function genData(kind){
+    const data=normalize(readRaw());
+    if(!data.length) return {err:'Brak notatek do eksportu.'};
+    if(kind.includes('csv')){
+      const rows=[['id','data_iso','data_pl','tekst'],
+        ...data.map(n=>[n.id,new Date(n.at).toISOString(),fmtPL(n.at),n.txt])];
+      const content=toCSV(rows,';'); localStorage.setItem('tacho_notes_last_export_csv', content);
+      return {content, mime:'text/csv', name:'notatki.csv', count:data.length};
+    } else {
+      const content=JSON.stringify(data,null,2); localStorage.setItem('tacho_notes_last_export_json', content);
+      return {content, mime:'application/json', name:'notatki.json', count:data.length};
+    }
+  }
+
+  async function handle(kind){
+    const pack=genData(kind);
+    if(pack.err){ alert(pack.err); return; }
+    const {content,mime,name,count}=pack;
+
+    if(kind==='csv' || kind==='json'){
+      const how=await tryDownload(name,content,mime);
+      const msg = how==='plik' ? 'Pobieranie pliku uruchomione.'
+               : how==='karta' ? 'Otworzono nową kartę z danymi.'
+               : 'Nie udało się pobrać pliku.';
+      alert(`${kind.toUpperCase()}: ${msg}\nWpisów: ${count}`);
+    } else {
+      const ok = await copyText(content);
+      alert(`${kind==='copy-csv'?'CSV':'JSON'}: ` + (ok?'Skopiowano do schowka.':'Nie udało się skopiować — otwarto kartę z danymi.\nWpisów: '+count));
+    }
+  }
+
+  const fab=document.getElementById('expFab');
+  const menu=document.getElementById('expMenu');
+  const overlay=document.getElementById('expOverlay');
+  const open = ()=>{ menu.style.display='block'; overlay.style.display='block'; };
+  const close=()=>{ menu.style.display='none'; overlay.style.display='none'; };
+  const toggle=()=>{ (menu.style.display==='block')?close():open(); };
+
+  ['click','touchend','pointerup'].forEach(ev=>{
+    fab.addEventListener(ev, e=>{ e.preventDefault(); toggle(); }, {passive:false});
+    menu.addEventListener(ev, e=>{
+      const b=e.target.closest('button[data-kind]'); if(!b) return;
+      e.preventDefault(); close(); handle(b.dataset.kind);
+    }, {passive:false});
+    overlay.addEventListener(ev, e=>{ e.preventDefault(); close(); }, {passive:false});
+  });
+
+  window.__exp = handle; // opcjonalnie do wywołania z konsoli
+})();
+</script>
+<!-- ===== /FAB EKSPORTU 2.1 =============================================== -->
 <body>
   <header class="top">
     <div class="brand">Tacho-Dziennik</div>
@@ -24,11 +170,73 @@
       <h1>Panel dzienny</h1>
       <p class="muted">Steruj paskiem DUO poniżej. Tu możesz też dodać szybkie notatki dyspozycji itp.</p>
       <div id="quick" class="card">
-        <input id="note" type="text" placeholder="Notatka (załadunek, rozładunek, dyspozycja…)" />
-        <button id="saveNote">Zapisz</button>
-        <div id="notes"></div>
+  <div class="note-form">
+    <input id="note" type="text" placeholder="Notatka (załadunek, rozładunek, dyspozycja…)" />
+    <div class="note-row">
+      <input id="noteWhen" type="datetime-local" />
+      <div class="note-actions">
+        <button id="noteNow" class="btn-ghost">Start = teraz</button>
+        <button id="saveNote" class="accent">Zapisz</button>
       </div>
+    </div>
+  </div>
+  <div id="notes" class="notes-list"></div>
+<!-- NOWE: pasek eksportu -->
+  <div class="notes-tools">
+  <button id="notesExportCSV"
+          type="button"
+          data-export="csv"
+          onclick="window.__exp && window.__exp('csv')">
+    Eksport CSV
+  </button>
+
+  <button id="notesExportJSON"
+          type="button"
+          data-export="json"
+          onclick="window.__exp && window.__exp('json')">
+    Eksport JSON
+  </button>
+</div>
+</div>
+</div>
     </section>
+<section class="card plan">
+  <div class="plan-head">
+    <div class="plan-stats" id="planStats">—</div>
+    <div class="plan-actions">
+      <button id="planExport">Eksport</button>
+      <button id="planClear" class="danger">Wyczyść</button>
+    </div>
+  </div>
+
+  <div class="plan-form">
+    <input id="pTitle" type="text" placeholder="Tytuł / opis (opcjonalnie)" />
+    <select id="pType">
+      <option value="drive">Jazda</option>
+      <option value="work">Praca</option>
+      <option value="pause">Przerwa</option>
+      <option value="rest">Odpoczynek</option>
+    </select>
+    <input id="pStart" type="time" />
+    <input id="pDur" type="number" min="1" placeholder="minuty" />
+    <div class="chips">
+      <button class="dur" data-min="15">+15</button>
+      <button class="dur" data-min="30">+30</button>
+      <button class="dur" data-min="45">+45</button>
+      <button id="pNow">Start = teraz</button>
+    </div>
+    <button id="planAdd" class="accent">Dodaj segment</button>
+  </div>
+
+  <div class="plan-timeline">
+    <div class="tl" id="planTl">
+      <div class="now" id="planNow"></div>
+    </div>
+    <div class="hours" id="planHours"></div>
+  </div>
+
+  <div id="planList" class="plan-list"></div>
+</section>
 
     <section id="view-log" class="view">
       <h1>Log zdarzeń</h1>
@@ -50,9 +258,9 @@
   </main>
 
   <!-- Twój pasek tacho DUO (v4+) -->
-  <script defer src="./addon-tacho-bar.duo.v4.js?v=10"></script>
+  <script defer src="./addon-tacho-bar.duo.v4.js?v=14"></script>
   <!-- Mały skrypt tej apki -->
-  <script defer src="./app.js?v=2"></script>
+  <script defer src="./app.js?v=7"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {

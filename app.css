@@ -183,3 +183,210 @@ body{ padding-bottom: calc(120px + var(--safe-b)) !important; }
 #tachoBar.duo.v4 .trow.top, #tachoBar.duo.v4 .trow{ gap: 8px; flex-wrap: wrap; }
 #tachoBar.gps-on   .gpsToggle{ background:#4ee3b5; color:#000; border-color:transparent; font-weight:900; }
 #tachoBar.gps-pending .gpsToggle{ background:#ffd65c; color:#000; border-color:transparent; font-weight:900; }
+#tachoBar .line { position: relative; overflow: hidden; }
+#tachoBar .line .lbl { opacity:.8 }
+#tachoBar .line .val { font-variant-numeric: tabular-nums; }
+#tachoBar .col { --bar: rgba(78,227,181,.14); }
+#tachoBar .col .line.rest9::before{
+  content:"";
+  position:absolute; left:0; top:calc(100% - 3px); height:3px;
+  width: var(--p-rest9, 0%); background: var(--bar);
+  border-radius: 3px;
+}
+/* PLAN DNIA */
+.card.plan { display:grid; gap:12px; }
+.plan-head{ display:flex; align-items:center; gap:12px; }
+.plan-head .plan-stats{ font-weight:600 }
+.plan-head .plan-actions{ margin-left:auto; display:flex; gap:8px; }
+
+.plan-form{ display:grid; gap:8px; }
+.plan-form .chips{ display:flex; gap:8px; flex-wrap:wrap; }
+
+.plan-timeline{ display:grid; gap:8px; }
+.plan-timeline .tl{
+  position:relative; height:36px; border:1px solid rgba(255,255,255,.08);
+  border-radius:12px; overflow:hidden; background:rgba(255,255,255,.03);
+}
+.plan-timeline .tl .block{
+  position:absolute; top:6px; height:24px; border-radius:8px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:12px; padding:0 8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.plan-timeline .tl .now{
+  position:absolute; top:0; bottom:0; width:2px; background:#4ee3b5; opacity:.9;
+}
+.plan-timeline .hours{ display:flex; justify-content:space-between; font-size:12px; opacity:.6; padding:0 4px; }
+
+.plan-list{ display:grid; gap:8px; }
+.seg-item{
+  display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center;
+  border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:10px;
+  background:rgba(255,255,255,.02);
+}
+.seg-item .meta{ font-size:14px; opacity:.9 }
+.seg-item .actions{ display:flex; gap:6px; flex-wrap:wrap; }
+.seg-item .tag{ font-weight:700; padding:2px 8px; border-radius:999px; font-size:12px; }
+.tag.drive{ background:#2ecc71; color:#001b0d }
+.tag.pause{ background:#f1c40f; color:#1e1a00 }
+.tag.work { background:#7aa2ff; color:#00122b }
+.tag.rest { background:#4ee3b5; color:#001b15 }
+
+.btn-ghost-sm{ background:transparent; border:1px dashed rgba(255,255,255,.2); padding:6px 10px; border-radius:10px; font-size:13px; }
+.btn-danger{ background:#ff6b6b; color:#000; border:0; padding:6px 10px; border-radius:10px; }
+
+.plan-timeline .block.drive{ background:rgba(46,204,113,.85); color:#001b0d }
+.plan-timeline .block.pause{ background:rgba(241,196,15,.9); color:#1e1a00 }
+.plan-timeline .block.work { background:rgba(122,162,255,.9); color:#00122b }
+.plan-timeline .block.rest { background:rgba(78,227,181,.9); color:#001b15 }
+/* --- FIX: Plan Dzienny – responsywność i brak „rozjazdu” --- */
+.card.plan { max-width: 100%; }
+
+.plan-timeline { overflow: hidden; }
+.plan-timeline .tl { width: 100%; position: relative; }
+.plan-timeline .hours{
+  display: grid;
+  grid-template-columns: repeat(13, 1fr); /* 0..24 co 2h */
+  gap: 0;
+  width: 100%;
+}
+.plan-timeline .hours span{
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Nie pozwól elementom z listy wypychać karty */
+.plan-list, .seg-item { max-width: 100%; }
+.seg-item .actions { flex-wrap: wrap; justify-content: flex-end; }
+
+/* iPhone – unikamy auto-zoom i „przesuwania” pól */
+.plan-form input, .plan-form select, .plan-form button { font-size: 16px; }
+
+/* Węższe ekrany: pokazuj co 4 godziny i trochę mniejsza czcionka */
+@media (max-width: 420px){
+  .plan-timeline .hours span{ font-size: 11px; }
+  /* schowaj co drugą etykietę (zostaną: 00, 04, 08, 12, 16, 20, 24) */
+  .plan-timeline .hours span:nth-child(odd){ display: none; }
+  .plan-timeline .tl{ height: 30px; }
+}
+
+/* Jeszcze węższe (np. bardzo małe okna) – tylko 00, 12, 24 */
+@media (max-width: 350px){
+  .plan-timeline .hours span{ display: none; }
+  .plan-timeline .hours span:nth-child(1),
+  .plan-timeline .hours span:nth-child(7),
+  .plan-timeline .hours span:nth-child(13){ display: block; }
+}
+/* === PLAN: poziome przewijanie + warstwy === */
+:root { --hourW: 56px; }               /* szerokość 1 godziny na osi */
+.card.plan { max-width: 100%; }
+
+/* Oś w poziomym scrollu */
+.plan-timeline{
+  position: relative;
+  overflow-x: auto;                     /* przewijanie w poziomie */
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 6px;                  /* żeby nie ocierało o krawędź */
+}
+.plan-timeline .tl,
+.plan-timeline .hours{
+  min-width: calc(var(--hourW) * 24);   /* 24h = 24 * szerokość godziny */
+}
+.plan-timeline .tl{
+  position: relative;
+  height: 36px;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:12px;
+  overflow:hidden;
+  background:rgba(255,255,255,.03);
+}
+.plan-timeline .tl .block{
+  position:absolute; top:6px; height:24px; border-radius:8px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:12px; padding:0 8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.plan-timeline .tl .now{ position:absolute; top:0; bottom:0; width:2px; background:#4ee3b5; }
+
+.plan-timeline .hours{
+  display:flex; justify-content:space-between;
+  font-size:12px; opacity:.65; padding:4px 2px 0;
+}
+
+/* WARSTWY: lista ma być nad osią (żeby przyciski były klikalne) */
+.plan-timeline { z-index: 1; }
+.plan-list    { position: relative; z-index: 2; }
+
+/* Na wąskich ekranach możesz zmniejszyć gęstość osi zmieniając var(--hourW) */
+@media (max-width: 420px){
+  :root { --hourW: 48px; }
+}
+@media (max-width: 360px){
+  :root { --hourW: 42px; }
+}
+/* Pokaż wszystkie etykiety co 2h (tak jak rysuje JS) */
+.plan-timeline .hours span{ display:inline-block !important; }
+
+/* i na węższych breakpointach też nic nie chowamy */
+@media (max-width: 420px){
+  .plan-timeline .hours span{ display:inline-block !important; }
+}
+@media (max-width: 350px){
+  .plan-timeline .hours span{ display:inline-block !important; }
+}
+/* --- Notatki: formularz + lista --- */
+#quick .note-form { display: grid; gap: 8px; }
+#quick .note-row  { display: grid; gap: 8px; grid-template-columns: 1fr auto; align-items: center; }
+#quick .note-actions { display: flex; gap: 8px; }
+#quick input, #quick button { font-size: 16px; } /* bez auto-zoomu na iPhone */
+
+.notes-list { display: grid; gap: 8px; margin-top: 6px; }
+.note-item{
+  display: grid; gap: 6px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.03);
+  border-radius: 12px;
+  padding: 10px;
+}
+.note-item .top { display: flex; gap: 8px; align-items: baseline; }
+.note-item .text { flex: 1; white-space: pre-wrap; }
+.note-item .meta { font-size: 12px; opacity: .7; }
+.note-item .row-actions { display: flex; gap: 8px; margin-left: auto; }
+.note-item .del {
+  background: #ff6b6b; color: #000; border: 0; border-radius: 10px;
+  padding: 6px 10px; font-weight: 700;
+}
+.notes-tools{
+  display:flex; gap:8px; margin-top:8px;
+  justify-content:flex-end; flex-wrap:wrap;
+}
+.notes-tools .btn-ghost{
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:10px; padding:6px 10px;
+}
+/* przyciski eksportu zawsze klikalne, nad wszystkim */
+.notes-tools { position: relative; z-index: 1000; }
+.notes-tools, .notes-tools * { pointer-events: auto; }
+/* Awaryjny pływający eksport */
+#expFab {
+  position: fixed; right: 14px; bottom: 14px;
+  width: 52px; height: 52px; border-radius: 26px;
+  background: #2bd5a7; color:#0b0e12;
+  display:flex; align-items:center; justify-content:center;
+  font-weight:700; box-shadow:0 6px 24px rgba(0,0,0,.35);
+  z-index: 99999; user-select:none; cursor:pointer;
+}
+#expFab:active { transform: scale(.97); }
+
+#expMenu {
+  position: fixed; right: 14px; bottom: 74px;
+  background:#1b1f27; border:1px solid rgba(255,255,255,.12);
+  border-radius:12px; padding:8px; display:none; z-index: 100000;
+  box-shadow:0 12px 30px rgba(0,0,0,.45);
+}
+#expMenu button{
+  display:block; width:160px; margin:4px 0; padding:8px 10px;
+  text-align:left; border-radius:10px; border:1px solid rgba(255,255,255,.14);
+  background:transparent; color:#e9edf3;
+}
+#expMenu button:active{ transform:scale(.98); }

@@ -1,4 +1,4 @@
-// addon-tacho-bar.duo.v4.js — DUO Tacho Bar (A/B)  — full build
+// addon-tacho-bar.duo.v4.js — DUO Tacho Bar (A/B) — full build v12
 // by Maciej & ChatGPT ❤️
 
 (function(){
@@ -8,7 +8,7 @@
   const MS = m => m*60000;
   const STINT = MS(270);          // 4h30
   const REST9 = MS(9*60);         // 9h
-  const ALERT_BEFORE = MS(15);    // prealert 15 min przed 4:30
+  const ALERT_BEFORE = MS(15);    // 15 min przed końcem stintu
   const KEY   = 'tacho_duo_v4';
   const WKEY  = 'tacho_duo_weeks_v1';
   const LKEY  = 'tacho_duo_log_v1';
@@ -28,6 +28,11 @@
     const h = Math.floor(ms/3600000), m = Math.floor((ms%3600000)/60000);
     return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
   };
+  function fmtHMfromMs(ms){
+    const mm = Math.max(0, Math.round(ms/60000));
+    const h = Math.floor(mm/60), m = mm%60;
+    return `${h}:${String(m).padStart(2,'0')}`;
+  }
 
   function load(k, fallback){ try{ return JSON.parse(localStorage.getItem(k)||''); }catch(_){ return fallback; } }
   function save(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(_){ } }
@@ -85,9 +90,11 @@
   }
   const cap = d => d.extend ? MS(10*60) : MS(9*60);
 
-  // ── GPS (foreground) ─────────────────────────────────────────────────────
-  let G = load(GKEY, { on:false, day: ymd(), km: 0, last:null });
+  // ── GPS (foreground) + filtry ────────────────────────────────────────────
+  const GPS_FILTER = { MIN_SPEED_KMH: 3, MAX_SPEED_KMH: 120, MIN_MOVE_M: 20, MAX_JUMP_KM: 1.0, MAX_ACCURACY_M: 50 };
+  let G = load(GKEY, { on:false, day: ymd(), km: 0, last:null, v:null });
   let gpsWatchId = null;
+
   const hv = a=>a*Math.PI/180;
   function distKm(lat1, lon1, lat2, lon2){
     const R=6371, dLat=hv(lat2-lat1), dLon=hv(lon2-lon1);
@@ -99,11 +106,21 @@
     const d = ymd(new Date());
     if (G.day!==d){ G.day=d; G.km=0; G.last=null; save(GKEY,G); }
   }
+  function setGpsUI(state){ // false | 'pending' | true
+    const bar = document.getElementById('tachoBar');
+    const btn = bar?.querySelector('.gpsToggle');
+    if (!btn) return;
+    if (state===true){ btn.textContent='GPS: on';  bar.classList.add('gps-on');  bar.classList.remove('gps-pending'); }
+    else if (state==='pending'){ btn.textContent='GPS: on…'; bar.classList.add('gps-pending'); bar.classList.remove('gps-on'); }
+    else { btn.textContent='GPS: off'; bar.classList.remove('gps-on','gps-pending'); }
+  }
   function updateKmUI(){
-    const el = document.querySelector('#tachoBar .kmToday');
+    const wrap = document.getElementById('tachoBar');
+    const el = wrap?.querySelector('.kmToday');
     if (el) el.textContent = `km dziś: ${G.km.toFixed(1)}`;
-    const btn = document.querySelector('#tachoBar .gpsToggle');
-    if (btn) btn.textContent = `GPS: ${G.on?'on':'off'}`;
+    const sp = wrap?.querySelector('.speedChip');
+    if (sp) sp.textContent = (G.v!=null) ? `v≈ ${Math.round(G.v)} km/h` : 'v≈ — km/h';
+    setGpsUI(G.on?true:false);
   }
   function startGPS(){
     if (!('geolocation' in navigator)) { alert('Brak GPS w przeglądarce.'); return; }
@@ -111,33 +128,39 @@
     gpsWatchId = navigator.geolocation.watchPosition(pos=>{
       if (document.visibilityState!=='visible') return;
       if (!S.running || act().mode!=='drive') return;
-      const {latitude:la, longitude:lo, speed} = pos.coords;
-      if (speed!=null){
-        const kmh = speed*3.6;
-        if (kmh>160 || kmh<1) return; // filtr skrajnych/zerowych
-      }
+      const {latitude:la, longitude:lo, speed, accuracy} = pos.coords;
+      if (accuracy && accuracy > GPS_FILTER.MAX_ACCURACY_M) return;
+
       resetGpsDayIfNeeded();
+      const t = Date.now();
+
       if (G.last){
-        const d = distKm(G.last.la, G.last.lo, la, lo);
-        if (d>0 && d<2) G.km += d; // odrzuć „teleporty”
+        const dtH = (t - G.last.t)/3600000;                 // h
+        const dKM = distKm(G.last.la, G.last.lo, la, lo);   // km
+        if (dKM*1000 < GPS_FILTER.MIN_MOVE_M){ G.last = {la,lo,t}; return; }
+
+        const vGps = (speed!=null) ? (speed*3.6) : null;
+        const vEst = dKM / Math.max(dtH, 1e-6);
+        const v = (vGps!=null) ? vGps : vEst;
+
+        if (v < GPS_FILTER.MIN_SPEED_KMH || v > GPS_FILTER.MAX_SPEED_KMH){ G.last = {la,lo,t}; return; }
+        if (dKM > GPS_FILTER.MAX_JUMP_KM){ G.last = {la,lo,t}; return; }
+
+        G.km += dKM; G.v = v;
+      } else {
+        G.v = null;
       }
-      G.last = { la, lo, t: Date.now() };
+      G.last = { la, lo, t };
       save(GKEY,G); updateKmUI();
-    }, err=>{ console.warn('GPS error', err); },{
-      enableHighAccuracy:true, maximumAge: 10000, timeout: 15000
-    });
+    }, err=>{
+      console.warn('GPS error', err);
+      alert('Wygląda, że przeglądarka/PWA blokuje GPS.\n\nUruchom przez HTTPS (GitHub Pages) i nadaj zgodę „Podczas używania”.');
+      setGpsUI(false);
+    }, { enableHighAccuracy:true, maximumAge: 5000, timeout: 15000 });
   }
   function stopGPS(){
     if (gpsWatchId!=null){ navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId=null; }
   }
-function setGpsUI(state){ // false | 'pending' | true
-  const bar = document.getElementById('tachoBar');
-  const btn = bar?.querySelector('.gpsToggle');
-  if (!btn) return;
-  if (state===true){ btn.textContent='GPS: on';  bar.classList.add('gps-on');  bar.classList.remove('gps-pending'); }
-  else if (state==='pending'){ btn.textContent='GPS: on…'; bar.classList.add('gps-pending'); bar.classList.remove('gps-on'); }
-  else { btn.textContent='GPS: off'; bar.classList.remove('gps-on','gps-pending'); }
-}
 
   // ── Wake-Lock (opcjonalne) ───────────────────────────────────────────────
   let wakeLock=null, awakeOn=false;
@@ -215,6 +238,7 @@ function setGpsUI(state){ // false | 'pending' | true
           </div>
           <div class="chips">
             <button class="aext">9h</button>
+            <span class="speedChip">v≈ — km/h</span>
           </div>
         </div>
 
@@ -223,6 +247,8 @@ function setGpsUI(state){ // false | 'pending' | true
             <div class="hdr">A</div>
             <div class="line stint"></div>
             <div class="line brk"></div>
+            <!-- NOWE: licznik 9h -->
+            <div class="line rest9"></div>
             <div class="line day"></div>
             <div class="line w30"></div>
             <div class="line w10"></div>
@@ -231,6 +257,8 @@ function setGpsUI(state){ // false | 'pending' | true
             <div class="hdr">B</div>
             <div class="line stint"></div>
             <div class="line brk"></div>
+            <!-- NOWE: licznik 9h -->
+            <div class="line rest9"></div>
             <div class="line day"></div>
             <div class="line w30"></div>
             <div class="line w10"></div>
@@ -272,6 +300,22 @@ function setGpsUI(state){ // false | 'pending' | true
     return bar;
   }
 
+  function updateParkingBtn(){
+    const bar = document.getElementById('tachoBar');
+    const btn = bar?.querySelector('.parking9');
+    if (!btn) return;
+    const aL = S.A.restRemain || 0;
+    const bL = S.B.restRemain || 0;
+    if (aL>0 || bL>0){
+      const sA = aL>0 ? `A ${fmtHMfromMs(aL)}` : '';
+      const sB = bL>0 ? `B ${fmtHMfromMs(bL)}` : '';
+      const parts = [sA, sB].filter(Boolean).join(' · ');
+      btn.textContent = `Parking 9h · ${parts}`;
+    } else {
+      btn.textContent = 'Parking 9h';
+    }
+  }
+
   // ── render ───────────────────────────────────────────────────────────────
   function paint(){
     const bar = ensureBar();
@@ -307,6 +351,10 @@ function setGpsUI(state){ // false | 'pending' | true
 
       $('.stint', col).innerHTML = `<span class="lbl">Stint</span><span class="val mono">${hm(d.stint)}</span>`;
       $('.brk',   col).innerHTML = `<span class="lbl">Przerwa</span><span class="val mono">${hm(d.breakRemain)}</span>`;
+
+      // NOWE: żywy licznik odpoczynku
+      $('.rest9', col).innerHTML = `<span class="lbl">Odpoczynek</span><span class="val mono">${hm(d.restRemain)}</span>`;
+
       $('.day',   col).innerHTML = `<span class="lbl">Dzień</span><span class="val mono">${hm(leftDay)}</span>`;
       $('.w30',   col).innerHTML = `<span class="lbl">30h</span><span class="val mono">${need===0?'✓ 9:00':'brak '+hm(need)}</span>`;
       $('.w10',   col).innerHTML = `<span class="lbl">10h tydz</span><span class="val mono">${used}/2</span>`;
@@ -316,11 +364,13 @@ function setGpsUI(state){ // false | 'pending' | true
       const brkP   = clamp((1 - (d.breakRemain / MS(45))) * 100);
       const dayP   = clamp((d.driveToday / cap(d)) * 100);
       const w30P   = clamp(((REST9 - need) / REST9) * 100);
+      const rest9P = clamp((1 - (d.restRemain / REST9)) * 100);
 
       col.style.setProperty('--p-stint', `${stintP}%`);
       col.style.setProperty('--p-break', `${brkP}%`);
       col.style.setProperty('--p-day',   `${dayP}%`);
       col.style.setProperty('--p-30h',   `${w30P}%`);
+      col.style.setProperty('--p-rest9', `${rest9P}%`);
 
       const prewarn = (d.mode==='drive' && (STINT - d.stint) <= ALERT_BEFORE && (STINT - d.stint) > 0);
       col.classList.toggle('active', S.active===id);
@@ -328,13 +378,16 @@ function setGpsUI(state){ // false | 'pending' | true
       col.classList.toggle('warn-stint', d.mode==='drive' && d.stint >= STINT);
       col.classList.toggle('ok-break',   d.breakRemain===0);
       col.classList.toggle('ok-30h',     need===0);
+      col.classList.toggle('ok-rest9',   d.restRemain===0);
       col.classList.toggle('warn-10h',   used>=2);
     });
 
-    // GPS UI
+    // GPS / km / speed
     resetGpsDayIfNeeded();
     updateKmUI();
-setGpsUI(G.on ? true : false);
+
+    // Parking 9h napis (A/B)
+    updateParkingBtn();
 
     // log
     const logBox = $('.tlog', bar);
@@ -345,7 +398,6 @@ setGpsUI(G.on ? true : false);
       logBox.textContent = lines.join('\n') || 'Brak wpisów.';
     }
 
-    // wake-lock label
     updateAwakeUI();
   }
 
@@ -374,10 +426,8 @@ setGpsUI(G.on ? true : false);
 
     const a = act(), b = other();
 
-    // failsafe: jeśli nie REST → nie trzymaj resztek odliczania 9h
     [S.A, S.B].forEach(d=>{ if (d.mode!=='rest' && d.restRemain>0) d.restRemain=0; });
 
-    // aktywny
     if (a.mode === 'drive'){
       a.stint += dt;
       a.driveToday += dt;
@@ -398,7 +448,6 @@ setGpsUI(G.on ? true : false);
       a.restRemain = Math.max(0, a.restRemain - dt);
     }
 
-    // pasywny REST liczy się też
     if (b.mode === 'rest'){
       b.restRemain = Math.max(0, b.restRemain - dt);
     }
@@ -411,12 +460,9 @@ setGpsUI(G.on ? true : false);
     const now = Date.now();
     if (d.mode==='rest' && next!=='rest'){ closeRest(d, now); }
     if (next==='rest' && d.mode!=='rest'){ d._restStart = now; }
-
     if (next==='drive'){
       if (d.breakRemain<=0 || d.breakCleared){
-        d.stint = 0;
-        d.breakRemain = MS(45);
-        d.breakCleared = false;
+        d.stint = 0; d.breakRemain = MS(45); d.breakCleared = false;
       }
     }
     d.mode = next;
@@ -427,6 +473,16 @@ setGpsUI(G.on ? true : false);
   function start(){
     const bar = ensureBar();
 
+    // mini-CSS dla banera update
+    (function injectUpdateCss(){
+      const css = `.update-bar{position:fixed;left:12px;right:12px;bottom:18px;background:#111;color:#fff;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:10px;display:flex;gap:10px;align-items:center;box-shadow:0 12px 28px rgba(0,0,0,.35);z-index:9999}
+      .update-bar .sp{flex:1}
+      .update-bar button{background:#4ee3b5;color:#000;border:0;border-radius:10px;padding:8px 12px;font-weight:800}
+      .update-bar .later{background:#2b3040;color:#fff}`;
+      const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
+    })();
+
+    // przyciski top
     on($('.aswitch', bar), 'click', ()=>{
       S.active = (S.active==='A') ? 'B' : 'A';
       save(KEY,S); paint(); log('switchActive',{to:S.active});
@@ -444,7 +500,6 @@ setGpsUI(G.on ? true : false);
       if (a.mode==='rest') closeRest(a, now);
       a.mode = 'drive';
 
-      // auto-ochrona współkierowcy
       other().mode = other().mode==='rest' ? 'rest' : 'pause';
 
       S.running = true; S.last = Date.now();
@@ -457,6 +512,7 @@ setGpsUI(G.on ? true : false);
       save(KEY,S); paint(); log(S.running?'play':'pause',{});
     });
 
+    // Parking 9h — DLA OBU kierowców (A i B) + odliczanie
     on($('.parking9', bar), 'click', ()=>{
       const now = Date.now();
       [S.A, S.B].forEach(d=>{
@@ -465,8 +521,8 @@ setGpsUI(G.on ? true : false);
         d.restRemain = REST9;
         d._restStart = now;
       });
-      S.running = true; S.last = Date.now();
-      save(KEY,S); paint(); log('parking9',{A:'rest',B:'rest'});
+      S.running = true; S.last = now;
+      save(KEY,S); paint(); log('parking9',{both:true});
     });
 
     // Reset dzień — twardy
@@ -487,14 +543,14 @@ setGpsUI(G.on ? true : false);
       save(KEY,S); paint(); log('resetDayHard',{});
     });
 
-    // Reset 9h — tylko odpoczynek (oba)
+    // Reset 9h — odpoczynek obu (wyczyszczenie historii 30h)
     on($('.restReset', bar), 'click', ()=>{
       const now = Date.now();
       [S.A, S.B].forEach(d=>{
         if (d.mode==='rest') closeRest(d, now);
         d.mode = 'pause';
         d.restRemain = 0;
-        d.restSegments = []; // wyczyść okno 30h
+        d.restSegments = [];
         d.warned15 = false;
       });
       save(KEY,S); paint(); log('resetRest9h',{scope:'both', wipe:true});
@@ -534,52 +590,38 @@ setGpsUI(G.on ? true : false);
       });
     });
 
-    // GPS
+    // GPS toggle
     on($('.gpsToggle', bar), 'click', async ()=>{
-  // jeśli wyłączamy
-  if (G.on){
-    G.on = false; save(GKEY,G);
-    stopGPS(); setGpsUI(false); updateKmUI();
-    log('gpsOff',{});
-    return;
-  }
-
-  // włączamy — najpierw „oczekiwanie”
-  setGpsUI('pending');
-
-  // iOS/Safari: musimy wymusić żądanie uprawnień *po kliknięciu*
-  let granted = false;
-  try{
-    granted = await new Promise((resolve)=>{
-      let ok = false;
-      const id = navigator.geolocation.watchPosition(
-        p => { ok = true; navigator.geolocation.clearWatch(id); resolve(true); },
-        e => { navigator.geolocation.clearWatch(id); resolve(false); },
-        { enableHighAccuracy:true, timeout:10000, maximumAge:0 }
-      );
-      // fallback na stary getCurrentPosition (czasem szybciej zadziała)
-      setTimeout(()=> {
-        if (ok) return;
-        navigator.geolocation.getCurrentPosition(
-          ()=> resolve(true),
-          ()=> resolve(false),
-          { enableHighAccuracy:true, timeout:8000 }
-        );
-      }, 2000);
+      if (G.on){
+        G.on = false; save(GKEY,G);
+        stopGPS(); setGpsUI(false); updateKmUI();
+        log('gpsOff',{});
+        return;
+      }
+      setGpsUI('pending');
+      let granted = false;
+      try{
+        granted = await new Promise((resolve)=>{
+          let ok = false;
+          const id = navigator.geolocation.watchPosition(
+            p => { ok = true; navigator.geolocation.clearWatch(id); resolve(true); },
+            e => { navigator.geolocation.clearWatch(id); resolve(false); },
+            { enableHighAccuracy:true, timeout:10000, maximumAge:0 }
+          );
+          setTimeout(()=> {
+            if (ok) return;
+            navigator.geolocation.getCurrentPosition(
+              ()=> resolve(true),
+              ()=> resolve(false),
+              { enableHighAccuracy:true, timeout:8000 }
+            );
+          }, 2000);
+        });
+      }catch(_){ granted = false; }
+      if (!granted){ setGpsUI(false); alert('GPS niedostępny lub brak zgody.\n\nUpewnij się, że to HTTPS i że nadałeś zgodę „Podczas używania”.'); return; }
+      G.on = true; save(GKEY,G); startGPS(); setGpsUI(true); updateKmUI(); log('gpsOn',{});
     });
-  }catch(_){ granted = false; }
 
-  if (!granted){
-    setGpsUI(false);
-    alert('GPS niedostępny lub brak zgody.\n\nUpewnij się, że:\n• otwierasz stronę przez https lub localhost,\n• w Ustawienia → Prywatność → Lokalizacja → Safari: „Podczas używania”.');
-    return;
-  }
-
-  // zgoda jest — włącz śledzenie
-  G.on = true; save(GKEY,G);
-  startGPS(); setGpsUI(true); updateKmUI();
-  log('gpsOn',{});
-});
     // Wake-Lock
     on($('.awakeToggle', bar), 'click', ()=> toggleAwake());
     updateAwakeUI();
@@ -606,23 +648,56 @@ setGpsUI(G.on ? true : false);
       $('#tachoFab').classList.remove('hidden');
       save(UIKEY, {min:true});
     });
-
-    // przywróć stan minimizacji
     const ui = load(UIKEY, {});
     if (ui?.min){ bar.classList.add('min'); $('#tachoFab').classList.remove('hidden'); }
 
-    // visibilty → catch-up
+    // visibilty → catch-up + re-arm GPS
     document.addEventListener('visibilitychange', ()=>{
       if (document.visibilityState==='hidden'){
         S.last = Date.now(); save(KEY,S);
-      } else { tick(); paint(); }
+      } else {
+        if (G.on) { try{ startGPS(); }catch(_){ } }
+        tick(); paint();
+      }
     });
     window.addEventListener('pagehide', ()=>{ S.last = Date.now(); save(KEY,S); });
-    window.addEventListener('pageshow', ()=>{ tick(); paint(); });
+    window.addEventListener('pageshow', ()=>{ if (G.on) { try{ startGPS(); }catch(_){ } } tick(); paint(); });
+    window.addEventListener('focus', ()=>{ if (G.on) { try{ startGPS(); }catch(_){ } } paint(); });
 
+    // auto-update PWA — baner (bez edycji app.js)
+    (function setupAutoUpdate(){
+      if (!('serviceWorker' in navigator)) return;
+      function showUpdateBar(reg){
+        if (document.querySelector('.update-bar')) return;
+        const bar = document.createElement('div');
+        bar.className = 'update-bar';
+        bar.innerHTML = `<span>Nowa wersja dostępna.</span><div class="sp"></div><button class="later">Później</button><button class="refresh">Odśwież</button>`;
+        document.body.appendChild(bar);
+        bar.querySelector('.later').onclick = () => bar.remove();
+        bar.querySelector('.refresh').onclick = () => { if (reg.waiting) reg.waiting.postMessage('SKIP_WAITING'); };
+      }
+      navigator.serviceWorker.addEventListener('controllerchange', () => location.reload());
+      navigator.serviceWorker.ready.then((reg)=>{
+        setInterval(() => reg.update(), 60000);
+        reg.addEventListener('updatefound', () => {
+          const nw = reg.installing;
+          if (!nw) return;
+          nw.addEventListener('statechange', () => {
+            if (nw.state === 'installed' && navigator.serviceWorker.controller){ showUpdateBar(reg); }
+          });
+        });
+      });
+      // PAMIĘTAJ: w sw.js dodaj raz:
+      // self.addEventListener('message', (e) => { if (e.data === 'SKIP_WAITING') self.skipWaiting(); });
+    })();
+
+    // start silnika
     paint();
     setInterval(tick, 1000);
     window.addEventListener('focus', ()=>paint());
+
+    // po starcie: uzbrój GPS, jeśli był ON
+    setTimeout(()=>{ if (G.on){ try{ startGPS(); }catch(_){ } setGpsUI(true); } }, 0);
   }
 
   if (document.readyState==='loading'){
@@ -630,5 +705,4 @@ setGpsUI(G.on ? true : false);
   } else {
     start();
   }
-
 })();
